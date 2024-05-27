@@ -1,0 +1,255 @@
+#!/usr/bin/python3
+
+import argparse
+import sys
+import os
+import requests
+from bs4 import BeautifulSoup
+
+
+# Définition de votre propre message d'aide
+HELP_TEXT = """
+Welcome to passive v1.0.0
+
+OPTIONS:
+    -fn         Search with full-name ["firstname lastname"]
+    -ip         Search with ip address
+    -u          Search with username
+"""
+
+# Does find the results that are in multiple pages (pages 2, 3, 4, etc...)
+def fn(fullname):
+    lastname = fullname.split(" ")[1]
+    firstname = fullname.split(" ")[0]
+    # searchinq for address and phone number
+    url = f"https://www.118000.fr/search?part=1&who={firstname}+{lastname}"
+    response = requests.get(url)
+    if response.status_code == 200:
+        soup = BeautifulSoup(response.content, "html.parser")
+        try:
+
+            name = soup.findAll("h2", {"class": "name title inbl"})
+            address = soup.findAll("div", {"class": "h4 address mtreset"})
+            phone = soup.findAll("a", {"class": "clickable atel"})
+            for i in range(len(name)):
+                print(f"Name: {name[i].text.strip()}")
+                # print(f'Address: {address[i].text}')
+                # check if address contain <br> tag and replace it with ', '
+                if address[i].find("br"):
+                    # convert the address to html
+                    address[i] = address[i].prettify()
+                    # replace the <br> tag with ', '
+                    # address[i] = address[i].replace('<br/>', 'br')
+                    address[i] = address[i].replace("\n", "")
+                    # remove the html tags
+                    address[i] = BeautifulSoup(address[i], "html.parser").text
+                    print(f"Address: {address[i]}")
+
+                else:
+                    print(f"Address: {address[i].text}")
+
+                if phone[i].text.strip() == "":
+                    if phone[i].find("img"):
+                        print("This phone number is hidden")
+                        print(f'Source Image: https:{phone[i].find("img")["src"]}')
+                else:
+                    print(f"Phone: {phone[i].text.strip()}")
+                print("--------------------------")
+        except:
+            print("No information found")
+    else:
+        print("Error while searching")
+
+
+def ip(ipaddress):
+    url = "https://www.ipinfo.io/{}".format(ipaddress)
+    response = requests.get(url)
+    if response.status_code == 200:
+        data = response.json()
+        print(f"IP: {data['ip']}")
+        print(f"City: {data['city']}")
+        print(f"Region: {data['region']}")
+        print(f"Country: {data['country']}")
+        print(f"Location(lat/long): {data['loc']}")
+        print(f"Provider: {data['org']}")
+    else:
+        print(response.text)
+    # url = "https://tools.keycdn.com/geo?={}".format(ipaddress)
+    # try:
+    #    response = requests.get(url)
+    # except requests.exceptions.RequestException as e:
+    #    print(e)
+    #    sys.exit(1)
+    # if response.status_code == 200:
+    #    soup = BeautifulSoup(response.content, "html.parser")
+    #    parent_coordinates = soup.find("dt", string="Coordinates")
+    #    coordinates = parent_coordinates.find_next_sibling("dd").text
+    #    print(f"Coordinates Lat/Long: {coordinates}")
+    #    parent_provider = soup.find("dt", string="ISP")
+    #    provider = parent_provider.find_next_sibling("dd").text
+    #    print(f"ISP: {provider}")
+    # else:
+    #    print(response.status_code)
+    #    print(response.text)
+
+
+def u(username):
+    # "https://www.youtube.com/@{}".format(username)
+    # "https://www.facebook.com/{}".format(username)
+    # "https://www.instagram.com/{}".format(username)
+    # "https://www.reddit.com/user/{}".format(username)
+    # "https://github.com/{}".format(username)
+    # "https://www.twitch.tv/{}".format(username)
+
+    urlMap = {
+        "Facebook": "https://www.facebook.com/{}".format(username),
+        "Instagram": "https://www.instagram.com/{}".format(username),
+        "Reddit": "https://www.reddit.com/user/{}".format(username),
+        "GitHub": "https://github.com/{}".format(username),
+        "Twitch": "https://www.twitch.tv/{}".format(username),
+        "YouTube": "https://www.youtube.com/@{}".format(username),
+    }
+
+    for key, value in urlMap.items():
+        response = requests.get(value)
+        if response.status_code == 200:
+            soup = BeautifulSoup(response.text, "html.parser")
+            if key == "Facebook":
+                title_elem = soup.find("title")
+                if title_elem and "Facebook" not in title_elem.text:
+                    print(f"{key} username: {username} exists")
+                else:
+                    print(f"{key} username: {username} does not exist")
+
+            elif key == "Instagram":
+                title_elem = soup.find("title")
+                if title_elem and title_elem.text.strip() != "Instagram":
+                    print(f"{key} username: {username} exists")
+                else:
+                    print(f"{key} username: {username} does not exist")
+
+            elif key == "Reddit":
+                forbidden_elem = soup.find("shreddit-forbidden")
+                if (
+                    forbidden_elem
+                    and "Sorry, nobody on Reddit goes by that name."
+                    in forbidden_elem.text
+                ):
+                    print(f"{key} username: {username} does not exist")
+                else:
+                    print(f"{key} username: {username} exists")
+            elif key == "GitHub":
+                title_elem = soup.find("title")
+                if title_elem and "Page not found" not in title_elem.text:
+                    print(f"{key} username: {username} exists")
+                else:
+                    print(f"{key} username: {username} not exists")
+            elif key == "Twitch":
+                # print(response.content.decode())
+                title_elem = soup.find("meta", content="twitch.tv/{}".format(username))
+                if title_elem:
+                    print(f"{key} username: {username} exists")
+                else:
+                    print(f"{key} username: {username} does not exist")
+            elif key == "YouTube":
+                title_elem = soup.find("title")
+                if title_elem:
+                    print(f"{key} username: {username} exists")
+                
+        else:
+            print(f"{key} username: {username} does not exist")
+        print("--------------------------")
+
+
+def find_available_filename(base_filename="results", extension=".txt"):
+    """
+    Finds an available filename by appending a number to the base filename if necessary.
+
+    Parameters:
+    - base_filename: The base name of the file without the extension.
+    - extension: The file extension.
+
+    Returns:
+    - A string with the available filename.
+    """
+    counter = 1
+    filename = f"{base_filename}{extension}"
+
+    while os.path.exists(filename):
+        filename = f"{base_filename}{counter}{extension}"
+        counter += 1
+
+    return filename
+
+
+def redirect_stdout_to_file(base_filename="results", extension=".txt"):
+    """
+    Redirects stdout to a file without overwriting existing files.
+
+    Parameters:
+    - base_filename: The base name of the file for redirection.
+    - extension: The file extension.
+    """
+    available_filename = find_available_filename(base_filename, extension)
+    sys.stdout = open(available_filename, "w")
+    return available_filename
+
+
+def main():
+    redirect_stdout_to_file()
+    # Configuration minimale d'argparse sans utiliser l'aide automatique
+    parser = argparse.ArgumentParser(description="Passive Information Gathering Tool")
+    parser.add_argument(
+        "-fn",
+        "--fullname",
+        metavar="",
+        type=str,
+        help='Search with full-name ["firstname lastname"]',
+    )
+    parser.add_argument(
+        "-ip", "--ipaddress", metavar="", type=str, help="Search with ip address"
+    )
+    parser.add_argument(
+        "-u", "--username", metavar="", type=str, help="Search with username"
+    )
+
+    # Gestion manuelle de l'option d'aide
+    if len(sys.argv) == 1:
+        parser.print_help()
+        sys.exit(1)
+
+    args = parser.parse_args()
+
+    # Logique de traitement des arguments ici
+    if args.fullname:
+        fn(args.fullname)
+    elif args.ipaddress:
+        ip(args.ipaddress)
+    elif args.username:
+        u(args.username)
+
+    sys.stdout.close()
+    sys.stdout = sys.__stdout__
+
+
+if __name__ == "__main__":
+    main()
+
+
+# Function to generate name combinations
+# def generate_name_combinations(full_name):
+#    first_name, last_name = full_name.split()
+#    return [
+#        (first_name, last_name),
+#        (last_name, first_name),
+#        (last_name.capitalize(), first_name.capitalize()),
+#        (first_name.capitalize(), last_name.capitalize()),
+#        (last_name.capitalize(), first_name),
+#        (last_name, first_name.capitalize()),
+#        (first_name.capitalize(), last_name),
+#        (last_name, first_name.lower()),
+#        (last_name.lower(), first_name),
+#        (first_name.lower(), last_name),
+#        (last_name, first_name.lower()),
+#        (last_name.lower(), first_name.capitalize()),
+#    ]
